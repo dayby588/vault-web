@@ -1,0 +1,17 @@
+[Unit]
+Description=Obsidian Vault Web Editor
+After=network.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=/usr/local/bin/gunicorn -c gunicorn.conf.py app:app
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vault-web
+
+[Install]
+WantedBy=multi-user.target

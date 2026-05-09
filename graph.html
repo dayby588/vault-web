@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识图谱 — 林途的自我进化之旅 v3.0</title>
+<script src="vendor/js/d3.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #080810;
+  --panel: rgba(12,12,24,0.96);
+  --border: rgba(255,255,255,0.07);
+  --text: #e0e0f0;
+  --muted: #6b7280;
+  --accent: #e94560;
+}
+body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Inter', sans-serif; overflow: hidden; height: 100vh; width: 100vw; }
+
+/* ── 顶部工具栏 ── */
+#toolbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20; height: 52px;
+  display: flex; align-items: center; gap: 10px; padding: 0 16px;
+  background: var(--panel); border-bottom: 1px solid var(--border); backdrop-filter: blur(20px);
+}
+#toolbar h1 { font-size: 14px; font-weight: 600; flex-shrink: 0; white-space: nowrap; }
+#toolbar .spacer { flex: 1; }
+#stats { font-size: 11px; color: var(--muted); display: flex; gap: 12px; flex-shrink: 0; }
+#stats span { color: var(--accent); font-weight: 600; }
+#search-graph {
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); padding: 5px 12px;
+  font-size: 12px; font-family: inherit; outline: none; width: 180px;
+  transition: border 0.2s, background 0.2s;
+}
+#search-graph:focus { border-color: var(--accent); background: rgba(233,69,96,0.08); }
+.tb-btn {
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  border-radius: 7px; color: var(--text); padding: 5px 11px;
+  font-size: 12px; font-family: inherit; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; white-space: nowrap; flex-shrink: 0;
+}
+.tb-btn:hover { background: rgba(255,255,255,0.1); }
+.tb-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(233,69,96,0.1); }
+
+/* ── 画布 ── */
+#canvas { position: fixed; top: 52px; left: 0; right: 0; bottom: 0; }
+svg { width: 100%; height: 100%; display: block; }
+
+/* ── 节点文字 ── */
+.node { cursor: pointer; }
+.node circle.node-glow { animation: breathe 3s ease-in-out infinite; fill-opacity: 0.15; }
+@keyframes breathe { 0%,100%{fill-opacity:0.1} 50%{fill-opacity:0.25} }
+.node text {
+  font-size: 10px; fill: rgba(220,220,240,0.82); pointer-events: none;
+  text-anchor: middle; dominant-baseline: middle; user-select: none;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.95);
+}
+.node text.label-always { fill-opacity: 1; }
+.node text.label-hub { font-size: 11px; fill: #fff; font-weight: 600; }
+.node text.label-none { display: none; }
+
+/* ── 连线 ── */
+.link { stroke: white; fill: none; }
+.link.dim { stroke-opacity: 0.03 !important; }
+
+/* ── 粒子 ── */
+.flow-particle { pointer-events: none; }
+
+/* ── Tooltip ── */
+#tooltip {
+  position: fixed; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px; font-size: 12px;
+  color: var(--text); pointer-events: none; opacity: 0;
+  transition: opacity 0.15s; z-index: 30; max-width: 240px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5); backdrop-filter: blur(10px);
+}
+#tooltip.show { opacity: 1; }
+#tooltip .tip-name { font-weight: 600; font-size: 13px; color: #fff; margin-bottom: 4px; }
+#tooltip .tip-path { color: var(--muted); font-size: 10px; word-break: break-all; }
+#tooltip .tip-degree { color: var(--accent); font-size: 11px; margin-top: 4px; }
+#tooltip .tip-hint { color: var(--muted); font-size: 10px; margin-top: 6px; border-top: 1px solid var(--border); padding-top: 5px; }
+
+/* ── 右侧预览面板 ── */
+#preview-panel {
+  position: fixed; top: 52px; right: -400px; bottom: 0; width: 380px;
+  background: var(--panel); border-left: 1px solid var(--border);
+  backdrop-filter: blur(20px); z-index: 25;
+  display: flex; flex-direction: column;
+  transition: right 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+#preview-panel.open { right: 0; }
+#preview-panel-header {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 16px 16px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+#preview-panel-title {
+  flex: 1; font-size: 15px; font-weight: 700; color: #fff;
+  line-height: 1.4; word-break: break-all;
+}
+#preview-panel-close {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 18px; padding: 0 2px; line-height: 1; flex-shrink: 0;
+  transition: color 0.15s;
+}
+#preview-panel-close:hover { color: var(--accent); }
+#preview-panel-meta {
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  font-size: 11px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; flex-shrink: 0;
+}
+#preview-panel-meta .meta-row { display: flex; gap: 6px; }
+#preview-panel-meta .meta-label { color: var(--muted); }
+#preview-panel-meta .meta-val { color: var(--text); }
+#preview-panel-body {
+  flex: 1; overflow-y: auto; padding: 14px 16px;
+  font-size: 13px; line-height: 1.7; color: rgba(220,220,240,0.8);
+  white-space: pre-wrap; word-break: break-word;
+}
+#preview-panel-body::-webkit-scrollbar { width: 4px; }
+#preview-panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+#preview-panel-footer {
+  padding: 12px 16px; border-top: 1px solid var(--border); flex-shrink: 0;
+}
+#preview-panel-open {
+  width: 100%; padding: 9px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), #c0392b);
+  color: #fff; border: none; font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit; transition: opacity 0.15s;
+}
+#preview-panel-open:hover { opacity: 0.85; }
+#preview-panel-links {
+  padding: 0 16px 10px; flex-shrink: 0;
+}
+#preview-panel-links h4 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+.panel-link-item {
+  font-size: 12px; color: var(--text); padding: 4px 0;
+  border-bottom: 1px solid var(--border); cursor: pointer;
+  display: flex; align-items: center; gap: 6px; transition: color 0.1s;
+}
+.panel-link-item:hover { color: var(--accent); }
+.panel-link-item .link-dir { font-size: 10px; color: var(--accent); flex-shrink: 0; }
+
+/* ── 图例（可过滤）── */
+#legend {
+  position: fixed; bottom: 20px; left: 20px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 12px; backdrop-filter: blur(16px); z-index: 20;
+  min-width: 190px; max-height: 60vh; display: flex; flex-direction: column;
+}
+#legend-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 6px; flex-shrink: 0;
+}
+#legend h3 { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+#legend-toggle-all { font-size: 10px; color: var(--accent); background: none; border: none; cursor: pointer; font-family: inherit; }
+#legend-items { overflow-y: auto; padding: 0 14px 10px; }
+#legend-items::-webkit-scrollbar { width: 3px; }
+#legend-items::-webkit-scrollbar-thumb { background: var(--border); }
+.legend-item {
+  display: flex; align-items: center; gap: 8px; font-size: 11px;
+  color: var(--text); margin-bottom: 5px; cursor: pointer;
+  padding: 3px 4px; border-radius: 5px; transition: background 0.1s; user-select: none;
+}
+.legend-item:hover { background: rgba(255,255,255,0.05); }
+.legend-item.filtered { opacity: 0.35; }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.legend-count { color: var(--muted); margin-left: auto; font-size: 10px; }
+
+/* ── 加载 ── */
+#loading {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--bg); z-index: 50;
+}
+#loading .spinner {
+  width: 48px; height: 48px; border: 3px solid rgba(233,69,96,0.2);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin-bottom: 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading p { color: var(--muted); font-size: 14px; }
+
+/* ── 提示 ── */
+#hint { position: fixed; bottom: 20px; right: 20px; font-size: 11px; color: var(--muted); text-align: right; line-height: 1.9; z-index: 20; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>🕸️ 知识图谱</h1>
+  <div class="spacer"></div>
+  <div id="stats">节点 <span id="s-nodes">—</span> · 边 <span id="s-edges">—</span> · 枢纽 <span id="s-hubs">—</span></div>
+  <input type="text" id="search-graph" placeholder="搜索节点... (Ctrl+K)" autocomplete="off">
+  <button class="tb-btn" id="btn-orphan">孤立节点</button>
+  <button class="tb-btn" id="btn-reset">⊙ 复位</button>
+  <button class="tb-btn" id="btn-back">← 编辑器</button>
+</div>
+
+<div id="canvas">
+  <svg id="svg-graph"></svg>
+</div>
+
+<div id="legend">
+  <div id="legend-header">
+    <h3>文件夹过滤</h3>
+    <button id="legend-toggle-all">全选/全清</button>
+  </div>
+  <div id="legend-items"></div>
+</div>
+
+<div id="hint">
+  🖱 拖拽节点 · 滚轮缩放 · 点击预览<br>
+  🔍 Ctrl+K 搜索 · ESC 清除
+</div>
+
+<div id="tooltip">
+  <div class="tip-name" id="tip-name"></div>
+  <div class="tip-path" id="tip-path"></div>
+  <div class="tip-degree" id="tip-degree"></div>
+  <div class="tip-hint">点击查看笔记预览</div>
+</div>
+
+<!-- 右侧预览面板 -->
+<div id="preview-panel">
+  <div id="preview-panel-header">
+    <div id="preview-panel-title"></div>
+    <button id="preview-panel-close">✕</button>
+  </div>
+  <div id="preview-panel-meta"></div>
+  <div id="preview-panel-links" style="display:none;">
+    <h4>关联笔记</h4>
+    <div id="panel-links-list"></div>
+  </div>
+  <div id="preview-panel-body">选择一个节点查看预览...</div>
+  <div id="preview-panel-footer">
+    <button id="preview-panel-open">在编辑器中打开 →</button>
+  </div>
+</div>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <p id="loading-msg">正在构建知识图谱...</p>
+</div>
+
+<script>
+const COLORS = {
+  "00-控制台":"#e94560","01-我与AI记忆":"#f39c12","02-收集箱":"#27ae60",
+  "10-自媒体与内容资产":"#3498db","20-素材库":"#9b59b6","30-学习与认知系统":"#1abc9c",
+  "40-战略与商业系统":"#e67e22","50-输出与复盘":"#e74c3c","60-Bases看板":"#2ecc71",
+  "70-AI协作":"#00cec9","80-系统维护与标准":"#636e72","90-归档":"#b2bec3",
+  "99-模板":"#dfe6e9","":"#7f8c8d"
+};
+
+let data, sim, svg, gL, gN, gP, zoomBehavior;
+let W = 0, H = 0;
+let searchQ = '';
+let animId = null;
+let showOrphans = true;
+let filteredFolders = new Set(); // 被隐藏的文件夹
+let currentPanelNode = null;
+let nodeMap = {};
+
+// ── 工具函数 ──────────────────────────────────
+function cleanLabel(name) {
+  let n = name.replace(/\.md$/, '');
+  // 剥离日期前缀：YYYY-MM-DD / YYYYMMDD / YYYY_MM_DD
+  n = n.replace(/^\d{4}[-_]?\d{2}[-_]?\d{2}[-_\s]+/, '').trim();
+  if (!n) n = name.replace(/\.md$/, '');
+  return n.length > 16 ? n.slice(0, 14) + '…' : n;
+}
+
+function nodeR(d) { return Math.min(4 + Math.sqrt((d.inDegree || 0) + 1) * 3.5, 22); }
+function sx(d) { return d && typeof d.x === 'number' ? d.x : 0; }
+function sy(d) { return d && typeof d.y === 'number' ? d.y : 0; }
+
+// 判断节点标签显示等级：全部显示，枢纽节点加粗区分
+function labelClass(d) {
+  const total = (d.inDegree || 0) + (d.outDegree || 0);
+  return total >= 4 ? 'label-always label-hub' : 'label-always';
+}
+
+// 判断节点是否孤立（入度+出度都为0）
+function isOrphan(d) { return (d.inDegree || 0) + (d.outDegree || 0) === 0; }
+
+// 判断节点是否应该显示（考虑文件夹过滤和孤立节点）
+function nodeVisible(d) {
+  if (filteredFolders.has(d.folder)) return false;
+  if (!showOrphans && isOrphan(d)) return false;
+  return true;
+}
+
+// ── 初始化 ──────────────────────────────────
+async function init() {
+  // 工具栏事件
+  document.getElementById('btn-back').onclick = () => { window.location.href = 'index.html'; };
+  document.getElementById('btn-reset').onclick = resetZoom;
+  document.getElementById('btn-orphan').onclick = toggleOrphans;
+  document.getElementById('preview-panel-close').onclick = closePanel;
+  document.getElementById('preview-panel-open').onclick = () => {
+    if (currentPanelNode) {
+      const b64 = btoa(encodeURIComponent(currentPanelNode.path)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+      window.location.href = 'index.html#file=' + b64;
+    }
+  };
+
+  // 键盘
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey||e.metaKey) && e.key==='k') { e.preventDefault(); document.getElementById('search-graph').focus(); }
+    if (e.key==='Escape') { clearSearch(); document.getElementById('search-graph').value=''; closePanel(); }
+  });
+  document.getElementById('search-graph').addEventListener('input', e => {
+    searchQ = e.target.value.trim().toLowerCase();
+    applySearch();
+  });
+
+  // 加载数据
+  try {
+    const r = await fetch('/api/graph');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    data = await r.json();
+    if (!data.ok) throw new Error(JSON.stringify(data));
+  } catch(e) {
+    document.getElementById('loading').innerHTML = `<p style="color:#e74c3c;text-align:center;padding:20px">加载失败：${e.message}</p>`;
+    return;
+  }
+
+  // 计算出度
+  data.nodes.forEach(n => { n.outDegree = 0; nodeMap[n.id] = n; });
+  data.edges.forEach(e => {
+    const src = nodeMap[e.source];
+    if (src) src.outDegree = (src.outDegree || 0) + 1;
+  });
+
+  // 统计枢纽节点（入度+出度>=4）
+  const hubs = data.nodes.filter(n => (n.inDegree||0) + (n.outDegree||0) >= 4).length;
+  document.getElementById('s-nodes').textContent = data.stats.nodes;
+  document.getElementById('s-edges').textContent = data.stats.edges;
+  document.getElementById('s-hubs').textContent = hubs;
+
+  renderLegend();
+  buildGraph();
+  document.getElementById('loading').style.display = 'none';
+}
+
+// ── 建图 ──────────────────────────────────────
+function buildGraph() {
+  W = window.innerWidth;
+  H = window.innerHeight - 52;
+
+  svg = d3.select('#svg-graph').attr('width', W).attr('height', H).attr('viewBox', `0 0 ${W} ${H}`);
+
+  // 星空背景
+  const starsG = svg.append('g');
+  const rng = d3.randomLcg(42);
+  d3.range(280).forEach(() => {
+    starsG.append('circle')
+      .attr('cx', rng()*W).attr('cy', rng()*H)
+      .attr('r', rng()*1.2+0.2)
+      .attr('fill','white').attr('opacity', rng()*0.35+0.05);
+  });
+
+  // 发光滤镜
+  const defs = svg.append('defs');
+  defs.append('filter').attr('id','glow').attr('x','-50%').attr('y','-50%').attr('width','200%').attr('height','200%')
+    .html('<feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>');
+  defs.append('filter').attr('id','glow-strong').attr('x','-100%').attr('y','-100%').attr('width','300%').attr('height','300%')
+    .html('<feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>');
+
+  // 缩放
+  zoomBehavior = d3.zoom().scaleExtent([0.05, 8]).on('zoom', e => {
+    gL.attr('transform', e.transform);
+    gN.attr('transform', e.transform);
+    gP.attr('transform', e.transform);
+  });
+  svg.call(zoomBehavior);
+
+  const nodes = data.nodes.map(n => ({...n}));
+  nodes.forEach(n => { nodeMap[n.id] = n; });
+
+  // 计算边权重（同一对节点出现多次 → 边更粗）
+  const edgeWeight = {};
+  data.edges.forEach(e => {
+    const key = [e.source, e.target].sort().join('|||');
+    edgeWeight[key] = (edgeWeight[key] || 0) + 1;
+  });
+
+  const links = data.edges.map(e => ({
+    source: nodeMap[e.source] || e.source,
+    target: nodeMap[e.target] || e.target,
+    sid: e.source, tid: e.target,
+    weight: edgeWeight[[e.source,e.target].sort().join('|||')] || 1
+  })).filter(e => e.source && e.target && e.source !== e.target);
+
+  const n = nodes.length;
+  const baseCharge = -Math.max(60, 30 + Math.sqrt(n) * 4);
+
+  sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(75).strength(0.4))
+    .force('charge', d3.forceManyBody().strength(baseCharge).distanceMax(380))
+    .force('center', d3.forceCenter(W/2, H/2).strength(0.04))
+    .force('collide', d3.forceCollide(d => nodeR(d) + 6).strength(0.7))
+    .force('x', d3.forceX(W/2).strength(0.015))
+    .force('y', d3.forceY(H/2).strength(0.015))
+    .alphaDecay(0.025)
+    .on('tick', () => tick(nodes, links));
+
+  gL = svg.append('g').attr('id','g-links');
+  gN = svg.append('g').attr('id','g-nodes');
+  gP = svg.append('g').attr('id','g-particles');
+
+  renderLinks(links);
+  renderNodes(nodes);
+  renderParticles(links);
+}
+
+function renderLinks(links) {
+  gL.selectAll('.link').data(links).enter().append('line')
+    .attr('class','link')
+    .attr('stroke-width', d => Math.min(1 + (d.weight - 1) * 0.8, 4))
+    .attr('stroke-opacity', d => d.weight > 1 ? 0.35 : 0.18);
+}
+
+function renderNodes(nodes) {
+  const sel = gN.selectAll('.node').data(nodes, d => d.id).enter().append('g').attr('class','node');
+
+  sel.append('circle').attr('class','node-glow')
+    .attr('r', d => nodeR(d)+8).attr('fill', d => d.color).attr('filter','url(#glow)');
+  sel.append('circle').attr('class','node-body')
+    .attr('r', d => nodeR(d)).attr('fill', d => d.color)
+    .attr('stroke','rgba(255,255,255,0.15)').attr('stroke-width',1).attr('filter','url(#glow)');
+
+  // 方案C标签：按连接度分级
+  sel.append('text')
+    .attr('class', d => labelClass(d))
+    .attr('dy', d => nodeR(d) + 12)
+    .text(d => cleanLabel(d.name));
+
+  // 拖拽
+  sel.call(d3.drag()
+    .on('start', (e,d) => { if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+    .on('drag', (e,d) => { d.fx=e.x; d.fy=e.y; })
+    .on('end', (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
+  );
+
+  // 事件
+  sel
+    .on('mouseenter', (e,d) => { showTip(e,d); highlightRelated(d); })
+    .on('mousemove', e => moveTip(e))
+    .on('mouseleave', () => { hideTip(); clearRelated(); })
+    .on('click', (e,d) => { e.stopPropagation(); openPanel(d); });
+
+  // 初始可见性
+  applyVisibility();
+}
+
+function renderParticles(links) {
+  links.forEach((l,i) => {
+    gP.append('circle').attr('class','flow-particle')
+      .attr('r', 2).attr('fill','#ffffff')
+      .attr('filter','url(#glow-strong)').attr('opacity', 0.5)
+      .datum({idx: i, phase: Math.random()});
+  });
+  requestAnimationFrame(animLoop);
+}
+
+function tick(nodes, links) {
+  gN.selectAll('.node').attr('transform', d => `translate(${d.x},${d.y})`);
+  gL.selectAll('.link')
+    .attr('x1', d => sx(d.source)).attr('y1', d => sy(d.source))
+    .attr('x2', d => sx(d.target)).attr('y2', d => sy(d.target));
+}
+
+function animLoop() {
+  const t = Date.now() / 1000;
+  const links = gL.selectAll('.link').data();
+  gP.selectAll('.flow-particle').each(function(d) {
+    const l = links[d.idx];
+    if (!l) return;
+    const x1=sx(l.source),y1=sy(l.source),x2=sx(l.target),y2=sy(l.target);
+    if (x1==null||x2==null) return;
+    const p = ((t * 0.4 + d.phase) % 1);
+    d3.select(this)
+      .attr('cx', x1+(x2-x1)*p).attr('cy', y1+(y2-y1)*p)
+      .attr('opacity', 0.35 + 0.5*Math.sin(p*Math.PI));
+  });
+  requestAnimationFrame(animLoop);
+}
+
+// ── 可见性控制 ──────────────────────────────
+function applyVisibility() {
+  if (!gN) return;
+  gN.selectAll('.node').each(function(d) {
+    d3.select(this).style('display', nodeVisible(d) ? null : 'none');
+  });
+  gL.selectAll('.link').each(function(d) {
+    const sv = nodeVisible(typeof d.source==='object'?d.source:{id:d.sid});
+    const tv = nodeVisible(typeof d.target==='object'?d.target:{id:d.tid});
+    d3.select(this).style('display', sv&&tv ? null : 'none');
+  });
+  gP.selectAll('.flow-particle').each(function(d) {
+    const links = gL.selectAll('.link').data();
+    const l = links[d.idx];
+    if (!l) return;
+    const sv = nodeVisible(typeof l.source==='object'?l.source:{id:l.sid});
+    const tv = nodeVisible(typeof l.target==='object'?l.target:{id:l.tid});
+    d3.select(this).style('display', sv&&tv ? null : 'none');
+  });
+}
+
+function toggleOrphans() {
+  showOrphans = !showOrphans;
+  document.getElementById('btn-orphan').classList.toggle('active', !showOrphans);
+  document.getElementById('btn-orphan').textContent = showOrphans ? '孤立节点' : '已隐藏孤立';
+  applyVisibility();
+}
+
+// ── 搜索 ──────────────────────────────────────
+function applySearch() {
+  if (!gN) return;
+  if (!searchQ) {
+    gN.selectAll('.node').style('opacity', d => nodeVisible(d) ? 1 : 0);
+    gL.selectAll('.link').style('opacity', null).classed('dim', false);
+    return;
+  }
+  gN.selectAll('.node').each(function(d) {
+    if (!nodeVisible(d)) return;
+    const m = d.name.toLowerCase().includes(searchQ) || d.path.toLowerCase().includes(searchQ);
+    d3.select(this).style('opacity', m ? 1 : 0.1)
+      .select('.node-body').attr('stroke-width', m ? 2.5 : 1).attr('stroke', m ? '#fff' : 'rgba(255,255,255,0.15)');
+  });
+  gL.selectAll('.link').style('opacity', d => {
+    const m = ((d.source.name||'').toLowerCase().includes(searchQ)) || ((d.target.name||'').toLowerCase().includes(searchQ));
+    return m ? 0.6 : 0.02;
+  });
+}
+function clearSearch() { searchQ=''; if(gN) applySearch(); }
+
+// ── 高亮相关 ──────────────────────────────────
+function highlightRelated(d) {
+  if (searchQ) return;
+  const rel = new Set([d.id]);
+  data.edges.forEach(e => {
+    if (e.source===d.id||e.source===d.path) rel.add(e.target);
+    if (e.target===d.id||e.target===d.path) rel.add(e.source);
+  });
+  gN.selectAll('.node').each(function(n) {
+    const visible = rel.has(n.id)||rel.has(n.path);
+    d3.select(this).style('opacity', visible ? 1 : 0.12);
+  });
+  gL.selectAll('.link').classed('dim', l => {
+    const sid=l.sid||l.source.id||l.source, tid=l.tid||l.target.id||l.target;
+    return sid!==d.id&&sid!==d.path&&tid!==d.id&&tid!==d.path;
+  });
+}
+function clearRelated() {
+  if (searchQ) return;
+  gN.selectAll('.node').style('opacity', d => nodeVisible(d) ? 1 : 0);
+  gL.selectAll('.link').classed('dim', false);
+}
+
+// ── Tooltip ──────────────────────────────────
+function showTip(e, d) {
+  document.getElementById('tip-name').textContent = cleanLabel(d.name);
+  document.getElementById('tip-path').textContent = d.path;
+  document.getElementById('tip-degree').textContent = `入度 ${d.inDegree||0} · 出度 ${d.outDegree||0} · ${(d.size/1024).toFixed(1)} KB`;
+  document.getElementById('tooltip').classList.add('show');
+  moveTip(e);
+}
+function moveTip(e) {
+  const t = document.getElementById('tooltip');
+  t.style.left = Math.min(e.clientX+16, window.innerWidth-260)+'px';
+  t.style.top = (e.clientY-10)+'px';
+}
+function hideTip() { document.getElementById('tooltip').classList.remove('show'); }
+
+// ── 右侧预览面板 ──────────────────────────────
+async function openPanel(d) {
+  currentPanelNode = d;
+  document.getElementById('preview-panel').classList.add('open');
+  document.getElementById('preview-panel-title').textContent = cleanLabel(d.name);
+  document.getElementById('preview-panel-body').textContent = '加载中...';
+
+  // 元信息
+  const meta = document.getElementById('preview-panel-meta');
+  meta.innerHTML = `
+    <div class="meta-row"><span class="meta-label">路径</span><span class="meta-val">${d.path}</span></div>
+    <div class="meta-row"><span class="meta-label">文件夹</span><span class="meta-val">${d.folder||'根目录'}</span></div>
+    <div class="meta-row"><span class="meta-label">连接</span><span class="meta-val">入度 ${d.inDegree||0} · 出度 ${d.outDegree||0}</span></div>
+    <div class="meta-row"><span class="meta-label">大小</span><span class="meta-val">${(d.size/1024).toFixed(1)} KB</span></div>
+  `;
+
+  // 关联笔记列表
+  const related = [];
+  data.edges.forEach(e => {
+    if (e.source===d.id) { const n=nodeMap[e.target]; if(n) related.push({node:n,dir:'→'}); }
+    if (e.target===d.id) { const n=nodeMap[e.source]; if(n) related.push({node:n,dir:'←'}); }
+  });
+  const linksPanel = document.getElementById('preview-panel-links');
+  const linksList = document.getElementById('panel-links-list');
+  if (related.length > 0) {
+    linksPanel.style.display = '';
+    linksList.innerHTML = related.slice(0,8).map(r =>
+      `<div class="panel-link-item" onclick="openPanel(nodeMap['${r.node.id}'])">
+        <span class="link-dir">${r.dir}</span>${cleanLabel(r.node.name)}
+      </div>`
+    ).join('');
+  } else {
+    linksPanel.style.display = 'none';
+  }
+
+  // 读取笔记内容
+  try {
+    const r = await fetch('/api/read?path=' + encodeURIComponent(d.path));
+    const json = await r.json();
+    if (json.ok) {
+      // 去掉 frontmatter，显示正文
+      let content = json.content.replace(/^---[\s\S]*?---\n?/, '').trim();
+      if (content.length > 600) content = content.slice(0, 580) + '\n\n...（内容较长，请在编辑器中查看）';
+      document.getElementById('preview-panel-body').textContent = content || '（空文档）';
+    } else {
+      document.getElementById('preview-panel-body').textContent = '读取失败';
+    }
+  } catch(e) {
+    document.getElementById('preview-panel-body').textContent = '读取失败：' + e.message;
+  }
+}
+
+function closePanel() {
+  document.getElementById('preview-panel').classList.remove('open');
+  currentPanelNode = null;
+}
+
+// ── 图例 + 文件夹过滤 ──────────────────────────
+function renderLegend() {
+  const folders = [...new Set(data.nodes.map(n => n.folder))].sort();
+  const el = document.getElementById('legend-items');
+  folders.forEach(f => {
+    const c = COLORS[f]||'#95a5a6';
+    const cnt = data.nodes.filter(n => n.folder===f).length;
+    const div = document.createElement('div');
+    div.className = 'legend-item';
+    div.dataset.folder = f;
+    div.innerHTML = `<span class="legend-dot" style="background:${c}"></span><span style="flex:1">${f||'(根目录)'}</span><span class="legend-count">${cnt}</span>`;
+    div.onclick = () => toggleFolder(f, div);
+    el.appendChild(div);
+  });
+
+  document.getElementById('legend-toggle-all').onclick = () => {
+    const allFiltered = filteredFolders.size === folders.length;
+    filteredFolders.clear();
+    if (!allFiltered) folders.forEach(f => filteredFolders.add(f));
+    document.querySelectorAll('.legend-item').forEach(el => el.classList.toggle('filtered', !allFiltered));
+    applyVisibility();
+  };
+}
+
+function toggleFolder(folder, el) {
+  if (filteredFolders.has(folder)) {
+    filteredFolders.delete(folder);
+    el.classList.remove('filtered');
+  } else {
+    filteredFolders.add(folder);
+    el.classList.add('filtered');
+  }
+  applyVisibility();
+}
+
+// ── 缩放复位 ──────────────────────────────────
+function resetZoom() {
+  svg.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity.translate(0,0).scale(1));
+}
+
+// ── 窗口 resize ────────────────────────────────
+window.addEventListener('resize', () => {
+  if (!sim) return;
+  W = window.innerWidth; H = window.innerHeight - 52;
+  svg.attr('viewBox', `0 0 ${W} ${H}`);
+  sim.force('center', d3.forceCenter(W/2,H/2).strength(0.04))
+     .force('x', d3.forceX(W/2).strength(0.015))
+     .force('y', d3.forceY(H/2).strength(0.015))
+     .alpha(0.3).restart();
+});
+
+init();
+</script>
+</body>
+</html>

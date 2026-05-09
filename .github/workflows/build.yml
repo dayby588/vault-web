@@ -1,0 +1,45 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install customtkinter pyinstaller flask gunicorn
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --onefile --name "林途知识进化系统" gui_launcher.py
+
+      - name: Create distribution folder
+        run: |
+          mkdir dist-pkg
+          cp dist/林途知识进化系统.exe dist-pkg/
+          cp config.example.json dist-pkg/
+          cp -r index.html graph.html js vendor app.py gunicorn.conf.py requirements.txt manage.sh install.sh vault-web.service README.md PLAN.md dist-pkg/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 林途知识进化系统-win64
+          path: dist-pkg/
+          retention-days: 7
+
+      - name: Download artifact (direct link info)
+        run: |
+          echo "构建完成!"
+          echo "点击上方 Artifacts 下载: 林途知识进化系统-win64"
