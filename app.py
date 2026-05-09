@@ -469,7 +469,7 @@ def api_write():
 def api_create():
     try:
         data = request.get_json(force=True, silent=True) or {}
-        result = create_note(data.get("name", ""), data.get("folder", ""))
+        result = create_note(data.get("name", ""), data.get("folder") or data.get("path") or "")
         if isinstance(result, tuple):
             return jsonify(result[0]), result[1]
         return jsonify(result)
