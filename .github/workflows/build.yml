@@ -33,7 +33,7 @@ jobs:
           Copy-Item config.example.json dist-pkg/
           Get-ChildItem -Name index.html,graph.html,app.py,requirements.txt,README.md,PLAN.md | ForEach-Object { Copy-Item $_ dist-pkg/ -ErrorAction SilentlyContinue }
           Get-ChildItem -Name js,vendor | ForEach-Object { Copy-Item -Recurse $_ dist-pkg/ -ErrorAction SilentlyContinue }
-          $batContent = '@echo off`ncd /d "%~dp0"`necho 首次运行安装依赖...`npip install flask 2>nul`necho 启动知识进化系统...`npython app.py'
+          $batContent = '@echo off`ncd /d "%~dp0"`necho 首次运行安装依赖...`npy -m pip install flask 2>nul`necho 启动知识进化系统...`npy app.py`npause'
           $batContent -replace '`n', "`n" | Set-Content -Path dist-pkg/启动知识系统.bat -Encoding UTF8
 
       - name: Upload artifact
