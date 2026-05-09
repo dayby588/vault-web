@@ -588,11 +588,22 @@ class MainApp(ctk.CTk):
         if pid_file.exists():
             pid = pid_file.read_text().strip()
             try:
-                os.kill(int(pid), 0)
-                self._set_running_state(True)
-                self._append_log(f"✅ 服务运行中 (PID {pid})")
-                return
-            except (ProcessLookupError, ValueError):
+                is_windows = sys.platform.startswith("win")
+                if is_windows:
+                    subprocess.run(["tasklist", "/FI", f"PID eq {pid}"],
+                                 capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                    result = subprocess.run(["tasklist", "/FI", f"PID eq {pid}"],
+                                          capture_output=True, text=True)
+                    if str(pid) in result.stdout:
+                        self._set_running_state(True)
+                        self._append_log(f"✅ 服务运行中 (PID {pid})")
+                        return
+                else:
+                    os.kill(int(pid), 0)
+                    self._set_running_state(True)
+                    self._append_log(f"✅ 服务运行中 (PID {pid})")
+                    return
+            except (ProcessLookupError, ValueError, Exception):
                 pass
         self._set_running_state(False)
         self._append_log("🔴 服务未运行")
@@ -627,21 +638,29 @@ class MainApp(ctk.CTk):
     def _start_service(self):
         pid_file = VAULT_WEB_DIR / "vault-web.pid"
         log_file = VAULT_WEB_DIR / "vault-web.log"
-        cmd = ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]
+        # Windows: 用 py 直接跑 app.py；Linux: 用 gunicorn
+        is_windows = sys.platform.startswith("win")
+        if is_windows:
+            cmd = ["py", "app.py"]
+        else:
+            cmd = ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]
         try:
             with open(log_file, "a") as f:
                 f.write(f"\n{'='*50}\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Launched by GUI\n")
-            proc = subprocess.Popen(
+            kwargs = dict(
                 cmd, cwd=str(VAULT_WEB_DIR),
                 stdout=open(log_file, "a"),
                 stderr=subprocess.STDOUT
             )
+            if is_windows:
+                kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            proc = subprocess.Popen(**kwargs)
             pid_file.write_text(str(proc.pid))
             import time; time.sleep(2)
             self._check_service_status()
             self._append_log(f"✅ 服务已启动 (PID {proc.pid})")
         except FileNotFoundError:
-            self._append_log("❌ gunicorn 未找到，请先安装: pip install gunicorn")
+            self._append_log("❌ 启动命令未找到，请确保 Python 已安装")
             self._set_running_state(False)
         except Exception as e:
             self._append_log(f"❌ 启动失败: {e}")
@@ -651,13 +670,18 @@ class MainApp(ctk.CTk):
         pid_file = VAULT_WEB_DIR / "vault-web.pid"
         try:
             pid = int(pid_file.read_text().strip())
-            os.kill(pid, 15)
-            time.sleep(1)
-            try:
-                os.kill(pid, 0)
-                os.kill(pid, 9)
-            except ProcessLookupError:
-                pass
+            is_windows = sys.platform.startswith("win")
+            if is_windows:
+                subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                              capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                os.kill(pid, 15)
+                time.sleep(1)
+                try:
+                    os.kill(pid, 0)
+                    os.kill(pid, 9)
+                except ProcessLookupError:
+                    pass
             pid_file.unlink(missing_ok=True)
             self._append_log("🛑 服务已停止")
         except Exception as e:
