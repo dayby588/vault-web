@@ -27,10 +27,11 @@ jobs:
 
       - name: Create distribution folder
         run: |
-          mkdir dist-pkg
-          cp dist/林途知识进化系统.exe dist-pkg/
-          cp config.example.json dist-pkg/
-          cp -r index.html graph.html js vendor app.py gunicorn.conf.py requirements.txt manage.sh install.sh vault-web.service README.md PLAN.md dist-pkg/
+          New-Item -ItemType Directory -Force -Path dist-pkg | Out-Null
+          Copy-Item dist/林途知识进化系统.exe dist-pkg/
+          Copy-Item config.example.json dist-pkg/
+          Get-ChildItem -Name index.html,graph.html,app.py,gunicorn.conf.py,requirements.txt,manage.sh,install.sh,vault-web.service,README.md,PLAN.md | ForEach-Object { Copy-Item $_ dist-pkg/ -ErrorAction SilentlyContinue }
+          Get-ChildItem -Name js,vendor | ForEach-Object { Copy-Item -Recurse $_ dist-pkg/ -ErrorAction SilentlyContinue }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
