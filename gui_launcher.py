@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-林途知识进化系统 — 桌面启动器
+知识进化系统 — 桌面启动器
 版本: v1.0
-品牌: 林途知识进化系统 | 公众号：林途Link
+品牌: 知识进化系统 | 公众号：林途Link
 
 打包说明（Windows）：
 1. 确保系统已安装 Python 3.8+ 并在 PATH 中
@@ -41,7 +41,7 @@ except ImportError:
     sys.exit(1)
 
 # ── 常量 ──
-APP_NAME = "林途知识进化系统"
+APP_NAME = "知识进化系统"
 BRAND_SUB = "公众号：林途Link"
 VERSION = "v1.0"
 LICENSE_KEY = "lintu"

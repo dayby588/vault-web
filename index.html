@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>林途的自我进化之旅 — Vault Web 编辑器 v2.7</title>
+  <title>知识进化系统 — Vault Web 编辑器 v2.7</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📝</text></svg>">
   <style>
 :root, [data-theme="dark"] {
@@ -881,7 +881,7 @@
 <div class="toolbar">
   <div class="toolbar-brand">
     <i data-lucide="sparkles"></i>
-    林途的自我进化之旅
+    知识进化系统
   </div>
   <div class="toolbar-actions">
     <button class="btn" id="btn-new" title="新建笔记 (Ctrl+N)">
@@ -898,6 +898,9 @@
     </button>
     <button class="btn" id="btn-root" title="回到根目录" onclick="loadTree('')">
       <i data-lucide="folder-up"></i>根目录
+    </button>
+    <button class="btn" id="btn-logs" title="运行日志" onclick="window.open('logs.html','_blank')">
+      <i data-lucide="terminal"></i>日志
     </button>
     <span class="file-info" id="file-info"></span>
   </div>

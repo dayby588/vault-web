@@ -23,27 +23,27 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller --onefile --name "林途知识进化系统" gui_launcher.py
+          pyinstaller --onefile --name "知识进化系统" gui_launcher.py
 
       - name: Create distribution folder
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist-pkg | Out-Null
-          Copy-Item dist/林途知识进化系统.exe dist-pkg/
+          Copy-Item dist/知识进化系统.exe dist-pkg/
           Copy-Item config.example.json dist-pkg/
           Get-ChildItem -Name index.html,graph.html,app.py,requirements.txt,README.md,PLAN.md | ForEach-Object { Copy-Item $_ dist-pkg/ -ErrorAction SilentlyContinue }
           Get-ChildItem -Name js,vendor | ForEach-Object { Copy-Item -Recurse $_ dist-pkg/ -ErrorAction SilentlyContinue }
-          $batContent = '@echo off`ncd /d "%~dp0"`necho 首次运行安装依赖...`npip install flask 2>nul`necho 启动林途知识进化系统...`npython app.py'
+          $batContent = '@echo off`ncd /d "%~dp0"`necho 首次运行安装依赖...`npip install flask 2>nul`necho 启动知识进化系统...`npython app.py'
           $batContent -replace '`n', "`n" | Set-Content -Path dist-pkg/启动知识系统.bat -Encoding UTF8
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: 林途知识进化系统-win64
+          name: 知识进化系统-win64
           path: dist-pkg/
           retention-days: 7
 
       - name: Download artifact (direct link info)
         run: |
           echo "构建完成!"
-          echo "点击上方 Artifacts 下载: 林途知识进化系统-win64"
+          echo "点击上方 Artifacts 下载: 知识进化系统-win64"

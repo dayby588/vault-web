@@ -527,3 +527,33 @@ if __name__ == "__main__":
     logger.info(f"    日志:   {_log_file}")
     logger.info("=" * 50)
     app.run(host="0.0.0.0", port=PORT, debug=False)
+
+
+# ── 日志查看页面 ──────────────────────────────────
+@app.route("/logs.html")
+def logs_page():
+    return send_from_directory(str(BASE_DIR), "logs.html")
+
+
+@app.route("/api/logs")
+def api_logs():
+    """返回 vault-web.log 最后 N 行"""
+    try:
+        if _log_file.exists():
+            lines = _log_file.read_text(encoding="utf-8").splitlines()
+            n = request.args.get("n", 200, type=int)
+            return jsonify({"ok": True, "lines": lines[-n:], "total": len(lines)})
+        return jsonify({"ok": False, "lines": [], "total": 0, "error": "日志文件不存在"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/logs/clear", methods=["POST"])
+def api_logs_clear():
+    """清空日志文件"""
+    try:
+        with open(_log_file, "w", encoding="utf-8") as f:
+            f.write("")
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
